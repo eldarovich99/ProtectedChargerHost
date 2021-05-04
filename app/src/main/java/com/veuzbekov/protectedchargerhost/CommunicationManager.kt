@@ -11,14 +11,14 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.*
+import kotlin.collections.HashMap
 
 class CommunicationManager(private val bluetoothAdapter: BluetoothAdapter) {
     private var outputStream: OutputStream? = null
     private var inStream: InputStream? = null
-    private val outputFlow = MutableStateFlow("")
     private var state: Protection = Protection.Waiting()
     private val stringBuilder = StringBuilder()
-    private var alarmJob: Job? = null
+    private var alarmJobs = HashMap<String, Job>()
     private val mmServerSocket: BluetoothServerSocket? by lazy(LazyThreadSafetyMode.NONE) {
         bluetoothAdapter.listenUsingInsecureRfcommWithServiceRecord(
             "bt_connection",
@@ -35,12 +35,15 @@ class CommunicationManager(private val bluetoothAdapter: BluetoothAdapter) {
             while (true) {
                 try {
                     val result = read()
-                    if (stringBuilder.isNotEmpty()) {
+                    if (result.isNotEmpty()) {
                         /*val newTime = System.currentTimeMillis()
                         if (newTime - lastTime > 1000) {
                             lastTime = newTime*/
                         val command =
                             ChargerCommands.checkCommand(command = result, uuid = "0123456789")
+                        /*if (command != ChargerCommands.Command.ENABLED
+                            && command != ChargerCommands.Command.DISABLED
+                            && command != ChargerCommands.Command.CHILD_ENABLED)*/
                         val isCommandSuccessful = sendBack(
                             result,
                             command == ChargerCommands.Command.PING
@@ -71,15 +74,19 @@ class CommunicationManager(private val bluetoothAdapter: BluetoothAdapter) {
 
     private fun sendBack(initialCommand: String, shouldAlarm: Boolean): Boolean {
         write(initialCommand)
+        Log.d("communication: write ", initialCommand)
         if (shouldAlarm) {
-            alarmJob = CoroutineScope(Dispatchers.IO).launch {
-                delay(500)
+            alarmJobs[initialCommand] = CoroutineScope(Dispatchers.IO).launch {
+                delay(1000)
                 alarm()
             }
         }
         val response = read()
-        if (response == initialCommand)
-            alarmJob?.cancel()
+        Log.d("communication: read ", response)
+        if (alarmJobs.containsKey(initialCommand)){
+            alarmJobs[initialCommand]?.cancel()
+            alarmJobs.remove(initialCommand)
+        }
         return response == initialCommand
     }
 
@@ -111,14 +118,14 @@ class CommunicationManager(private val bluetoothAdapter: BluetoothAdapter) {
 
     private fun alarm() {
         // Here should be actual alarm
-        outputFlow.value = "Alarm"
+        Log.d("communication: ", "!!! ALARM !!!")
         state = Protection.Alarm()
     }
 
     private fun notifyElectricityLost() {
         // write, wait for answer for 1 second, alarm if no response is provided
         state = Protection.ElectricityLost()
-        outputFlow.value = "Electricity lost"
+        Log.d("communication: ", "Electricity lost")
     }
 
     private fun pingBack() {
@@ -175,8 +182,6 @@ class CommunicationManager(private val bluetoothAdapter: BluetoothAdapter) {
             //init()
         }
     }
-
-    fun getOutputFlow(): StateFlow<String> = outputFlow
 
     companion object {
         const val PING_DELAY = 500L
