@@ -35,7 +35,7 @@ object ChargerCommands {
 
     fun checkCommand(command: String, uuid: String): Command{
         return if (command.contains(uuid)){
-            when(command.substring(0,1).toIntOrNull()){
+            when(command.substring(0, 1).toIntOrNull()){
                 1 -> Command.PING
                 2 -> Command.ENABLED
                 3 -> Command.CHILD_ENABLED
