@@ -10,5 +10,5 @@ object Constants {
     const val TEST_ALARM = "alarm_test"
     const val SAFE_LOCATION_LATITUDE = "safe_location_lat"
     const val SAFE_LOCATION_LONGITUDE = "safe_location_lng"
-    const val CHARGER_NAME = "Haylou-GT2_R" // "Smart power"
+    const val CHARGER_NAME = "ASUS_Z01RD" // "Smart power"
 }

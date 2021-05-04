@@ -1,6 +1,9 @@
 package com.veuzbekov.protectedchargerhost
+
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothServerSocket
+import android.bluetooth.BluetoothSocket
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,15 +12,20 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.Charset
+import java.util.*
 
 class CommunicationManager(private val bluetoothAdapter: BluetoothAdapter) {
     private var outputStream: OutputStream? = null
     private var inStream: InputStream? = null
-    private var device: BluetoothDevice? = null
     private val outputFlow = MutableStateFlow("")
-    private val cycleContext = SupervisorJob() + Dispatchers.IO
+    private val mmServerSocket: BluetoothServerSocket? by lazy(LazyThreadSafetyMode.NONE) {
+        bluetoothAdapter.listenUsingInsecureRfcommWithServiceRecord(
+            "bt_connection",
+            UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
+        )
+    }
 
-    private fun receiveData() {
+    fun receiveData() {
         val bufferSize = 1024
         var buffer = ByteArray(bufferSize)
         val tinyBuffer = ByteArray(bufferSize)
@@ -51,28 +59,29 @@ class CommunicationManager(private val bluetoothAdapter: BluetoothAdapter) {
         thread.start()
     }
 
-    private fun init(): Boolean {
+    fun init(): Boolean {
         return try {
-            val blueAdapter = BluetoothAdapter.getDefaultAdapter()
-            if (blueAdapter != null) {
-                if (blueAdapter.isEnabled) {
-                    val bondedDevices = blueAdapter.bondedDevices
-                    if (bondedDevices.size > 0) {
-                        val uuids = device!!.uuids
-                        val socket = device!!.createRfcommSocketToServiceRecord(uuids[0].uuid)
-                        socket.connect()
-                        outputStream = socket.outputStream
-                        inStream = socket.inputStream
-                    }
-                    Log.e("error", "No appropriate paired devices.")
-                } else {
-                    Log.e("error", "Bluetooth is disabled.")
+            // Keep listening until exception occurs or a socket is returned.
+            var shouldLoop = true
+            while (shouldLoop) {
+                val socket: BluetoothSocket? = try {
+                    mmServerSocket?.accept()
+                } catch (e: IOException) {
+                    Log.e("bt socket", "Socket's accept() method failed", e)
+                    shouldLoop = false
+                    null
+                }
+                socket?.also {
+                    outputStream = socket.outputStream
+                    inStream = socket.inputStream
+                    mmServerSocket?.close()
+                    shouldLoop = false
                 }
             }
             true
         } catch (e: IOException) {
             // TODO return false; true is returned to emulate that charger is connected
-            true
+            false
             //false
         }
     }
